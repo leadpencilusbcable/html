@@ -1,0 +1,4 @@
+example/public/images/*
+example/public/pages/index.html
+example/res/monsters.json
+.vscode

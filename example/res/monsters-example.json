@@ -1,0 +1,32 @@
+[
+    {
+        "name": "Example",
+        "size": "M",
+        "type": "Humanoid",
+        "alignment": "Chaotic Good",
+        "ac": 10,
+        "hp": 23,
+        "speed": "230 ft",
+        "str": 11,
+        "dex": 11,
+        "con": 11,
+        "int": 11,
+        "wis": 11,
+        "cha": 11,
+        "skill": "Perception +5",
+        "passive": "14",
+        "cr": "1/4",
+        "trait": {
+            "name": "Claw Attack",
+            "text": "Attack with claw.",
+            "attack": "1d6"
+        },
+        "action": [
+            {
+                "name": "Buff",
+                "text": "Melee Weapon Attack: +8 to hit",
+                "attack": "1d4+2"
+            }
+        ]
+    }
+]

@@ -1,0 +1,28 @@
+body {
+    margin: 0;
+    background-color: beige;
+}
+
+#monster-table {
+    border-collapse: collapse;
+    width: 100%;
+    overflow-y: auto;
+}
+
+#monster-table thead {
+    position: sticky;
+    top: 0px;
+}
+
+#monster-table thead tr {
+    background-color: beige;
+}
+
+
+#monster-table tr:nth-child(even) {
+    background-color: white;
+}
+
+#monster-table th, td {
+    padding:  1% 4%;
+}
