@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fstream>
+#include <unordered_map>
+#include <map>
 #include <vector>
 #include <chrono>
 #include <string>
@@ -14,12 +16,88 @@ std::vector<monster> monsters;
 
 struct mg_str caps[2];
 
+std::unordered_map<std::string, std::string> cache;
+
+html::element construct_monster_table_body(std::vector<monster> table_monsters)
+{
+    html::element tbody("tbody");
+
+    for(monster mon : table_monsters){
+        html::element body_tr("tr");
+
+        html::element name_td("td");
+        name_td.add_inner_text(mon.name);
+
+        html::element cr_td("td");
+        cr_td.add_inner_text(mon.cr);
+
+        html::element hp_td("td");
+        hp_td.add_inner_text(std::to_string(mon.hp));
+
+        html::element ac_td("td");
+        ac_td.add_inner_text(std::to_string(mon.ac));
+
+        html::element speed_td("td");
+        speed_td.add_inner_text("0");
+
+        html::element swim_speed_td("td");
+        swim_speed_td.add_inner_text("0");
+
+        html::element fly_speed_td("td");
+        fly_speed_td.add_inner_text("0");
+
+        body_tr.add_child(name_td);
+        body_tr.add_child(cr_td);
+        body_tr.add_child(hp_td);
+        body_tr.add_child(ac_td);
+        body_tr.add_child(speed_td);
+        body_tr.add_child(swim_speed_td);
+        body_tr.add_child(fly_speed_td);
+
+        tbody.add_child(body_tr);
+    }
+
+    return tbody;
+}
+
+//taken from https://stackoverflow.com/a/24327749
+std::vector<std::string> split(std::string const& original, char separator)
+{
+    std::vector<std::string> results;
+    std::string::const_iterator start = original.begin();
+    std::string::const_iterator end = original.end();
+    std::string::const_iterator next = std::find(start, end, separator);
+
+    while(next != end){
+        results.push_back(std::string(start, next));
+        start = next + 1;
+        next = std::find(start, end, separator);
+    }
+
+    results.push_back(std::string(start, next));
+
+    return results;
+}
+
+std::map<std::string, std::string> parse_query_params(const std::string& query_params)
+{
+    std::vector<std::string> query_param_strings = split(query_params, '&');
+
+    std::map<std::string, std::string> query_param_map;
+
+    for(const std::string& str : query_param_strings){
+        std::vector<std::string> key_value = split(str, '=');
+
+        query_param_map[key_value[0]] = key_value[1];
+    }
+
+    return query_param_map;
+}
+
 static void fn(struct mg_connection* c, int ev, void* ev_data)
 {
     if(ev == MG_EV_HTTP_MSG){
         struct mg_http_message *hm = (struct mg_http_message*) ev_data;
-
-        std::cout << std::string(hm->query.buf).substr(0, hm->query.len) << std::endl;
 
         if(mg_strcmp(hm->uri, mg_str("/")) == 0){
             struct mg_http_serve_opts opts = {
@@ -27,6 +105,55 @@ static void fn(struct mg_connection* c, int ev, void* ev_data)
             };
 
             mg_http_serve_file(c, hm, "./public/pages/index.html", &opts);
+        }
+
+        else if(mg_strcmp(hm->uri, mg_str("/monsters")) == 0){
+            //TODO: need to restrict cache keys so that malicious user cannot create infinite cache entries
+            std::string cache_key = "";
+            std::map<std::string, std::string> q_params;
+
+            if(hm->query.len){
+                cache_key = std::string(hm->query.buf).substr(0, hm->query.len);
+                q_params = parse_query_params(cache_key);
+            }
+
+            auto cache_val = cache.find(cache_key);
+
+            if(cache_val != cache.end()){
+                std::string table_string = cache_val->second;
+
+                mg_http_reply(c, 200, "Content-Type: text/html\r\n", table_string.c_str());
+            } else{
+                std::vector<monster> sorted_monsters = monsters;
+
+                auto sort_param_it = q_params.find("sort");
+
+                if(sort_param_it != q_params.end()){
+                    std::string sort_param = sort_param_it->second;
+
+                    auto dsc_it = sort_param.find("_dsc");
+
+                    if(dsc_it != std::string::npos){
+                        auto comp_func_it = query_param_compare_funcs_dsc.find(sort_param.substr(0, dsc_it));
+
+                        if(comp_func_it != query_param_compare_funcs_dsc.end()){
+                            std::sort(sorted_monsters.begin(), sorted_monsters.end(), comp_func_it->second);
+                        }
+                    } else{
+                        auto comp_func_it = query_param_compare_funcs_asc.find(sort_param);
+
+                        if(comp_func_it != query_param_compare_funcs_asc.end())
+                            std::sort(sorted_monsters.begin(), sorted_monsters.end(), comp_func_it->second);
+                    }
+                }
+
+                html::element tbody = construct_monster_table_body(sorted_monsters);
+                std::string tbody_string = tbody.to_string();
+
+                cache.insert({ cache_key, tbody_string });
+
+                mg_http_reply(c, 200, "Content-Type: text/html\r\n", tbody_string.c_str());
+            }
         }
 
         else if(mg_match(hm->uri, mg_str("/public/#"), caps)){
@@ -206,8 +333,12 @@ void create_index_html_file()
     link.set_attribute("rel", "stylesheet");
     link.set_attribute("href", "/public/styles/main.css");
     head.add_child(link);
+    html::element script("script");
+    script.set_attribute("src", "/public/scripts/index.js");
+    head.add_child(script);
 
     html::element body("body");
+    body.set_attribute("onload", "onLoad()");
 
     html::element table("table");
     table.set_attribute("id", "monster-table");
@@ -222,49 +353,27 @@ void create_index_html_file()
             th.set_attribute("style", "width: 20%;");
 
         th.set_attribute("align", "left");
-        th.add_inner_text(col_names[i]);
+        th.set_attribute("id", "thead" + std::to_string(i));
+
+        html::element div("div");
+
+        html::element p("p");
+        p.add_inner_text(col_names[i]);
+
+        html::element img("img");
+        img.set_attribute("src", "/public/images/arrow.png");
+
+        div.add_child(p);
+        div.add_child(img);
+
+        th.add_child(div);
 
         tr.add_child(th);
     }
 
     thead.add_child(tr);
 
-    html::element tbody("tbody");
-
-    for(monster mon : monsters){
-        html::element body_tr("tr");
-
-        html::element name_td("td");
-        name_td.add_inner_text(mon.name);
-
-        html::element cr_td("td");
-        cr_td.add_inner_text(mon.cr);
-
-        html::element hp_td("td");
-        hp_td.add_inner_text(std::to_string(mon.hp));
-
-        html::element ac_td("td");
-        ac_td.add_inner_text(std::to_string(mon.ac));
-
-        html::element speed_td("td");
-        speed_td.add_inner_text("0");
-
-        html::element swim_speed_td("td");
-        swim_speed_td.add_inner_text("0");
-
-        html::element fly_speed_td("td");
-        fly_speed_td.add_inner_text("0");
-
-        body_tr.add_child(name_td);
-        body_tr.add_child(cr_td);
-        body_tr.add_child(hp_td);
-        body_tr.add_child(ac_td);
-        body_tr.add_child(speed_td);
-        body_tr.add_child(swim_speed_td);
-        body_tr.add_child(fly_speed_td);
-
-        tbody.add_child(body_tr);
-    }
+    html::element tbody = construct_monster_table_body(monsters);
 
     table.add_child(thead);
     table.add_child(tbody);

@@ -18,11 +18,29 @@ body {
     background-color: beige;
 }
 
+#monster-table thead tr th div {
+    display: flex;
+    align-items: center;
+}
+
+#monster-table thead tr th div img {
+    width: 10px;
+    height: 10px;
+    padding-left: 20px;
+}
 
 #monster-table tr:nth-child(even) {
     background-color: white;
 }
 
 #monster-table th, td {
-    padding:  1% 4%;
+    padding: 1% 4%;
+}
+
+.rotatedown {
+    transform: rotate(90deg);
+}
+
+.rotateup {
+    transform: rotate(-90deg);
 }
